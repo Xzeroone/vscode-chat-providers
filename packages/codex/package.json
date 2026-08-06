@@ -1,0 +1,162 @@
+{
+	"name": "codex-chat-provider",
+	"displayName": "Codex Chat Provider (ChatGPT OAuth)",
+	"description": "VS Code Chat language models via OpenAI Codex / ChatGPT subscription OAuth. Reuses ~/.codex or Pi openai-codex login \u2014 no API key.",
+	"version": "0.1.1",
+	"publisher": "xzeroone",
+	"preview": true,
+	"author": {
+		"name": "Xzeroone"
+	},
+	"license": "MIT",
+	"private": false,
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/Xzeroone/vscode-chat-providers.git",
+		"directory": "packages/codex"
+	},
+	"bugs": {
+		"url": "https://github.com/Xzeroone/vscode-chat-providers/issues"
+	},
+	"homepage": "https://github.com/Xzeroone/vscode-chat-providers/tree/main/packages/codex",
+	"type": "module",
+	"engines": {
+		"vscode": "^1.103.0"
+	},
+	"categories": [
+		"AI",
+		"Chat"
+	],
+	"keywords": [
+		"codex",
+		"openai",
+		"chatgpt",
+		"oauth",
+		"language-model-provider",
+		"vscode-lm",
+		"byok"
+	],
+	"activationEvents": [
+		"onLanguageModelChatProvider:openai-codex"
+	],
+	"main": "./out/extension.js",
+	"contributes": {
+		"languageModelChatProviders": [
+			{
+				"vendor": "openai-codex",
+				"displayName": "Codex (ChatGPT)",
+				"managementCommand": "openai-codex.manage"
+			}
+		],
+		"commands": [
+			{
+				"command": "openai-codex.signIn",
+				"title": "Codex: Sign in with ChatGPT"
+			},
+			{
+				"command": "openai-codex.manage",
+				"title": "Codex: Manage Auth"
+			},
+			{
+				"command": "openai-codex.refreshAuth",
+				"title": "Codex: Refresh OAuth Token"
+			},
+			{
+				"command": "openai-codex.refreshModels",
+				"title": "Codex: Refresh Models"
+			},
+			{
+				"command": "openai-codex.status",
+				"title": "Codex: Auth Status"
+			}
+		],
+		"configuration": {
+			"title": "Codex Chat Provider",
+			"properties": {
+				"openaiCodex.authPreference": {
+					"type": "string",
+					"enum": [
+						"auto",
+						"secret",
+						"codex-cli",
+						"pi"
+					],
+					"default": "auto",
+					"markdownDescription": "Token source: **auto** = VS Code Secret Storage (Command Palette sign-in) \u2192 `~/.codex/auth.json` \u2192 Pi. **secret** = palette only.",
+					"order": 1
+				},
+				"openaiCodex.writeCodexAuthFile": {
+					"type": "boolean",
+					"default": true,
+					"markdownDescription": "After Command Palette sign-in, also write `~/.codex/auth.json` so Codex CLI can reuse the session if installed later.",
+					"order": 1
+				},
+				"openaiCodex.codexAuthPath": {
+					"type": "string",
+					"default": "",
+					"description": "Optional override path to Codex CLI auth.json (default: ~/.codex/auth.json).",
+					"order": 2
+				},
+				"openaiCodex.piAuthPath": {
+					"type": "string",
+					"default": "",
+					"description": "Optional override path to Pi auth.json (default: ~/.pi/agent/auth.json).",
+					"order": 3
+				},
+				"openaiCodex.clientVersion": {
+					"type": "string",
+					"default": "",
+					"markdownDescription": "Client version for `GET /codex/models`. Empty = read `~/.codex/version.json` or default `0.146.0`.",
+					"order": 4
+				},
+				"openaiCodex.hideHiddenModels": {
+					"type": "boolean",
+					"default": true,
+					"description": "Hide models with visibility=hide from the picker.",
+					"order": 5
+				},
+				"openaiCodex.defaultThinkingLevel": {
+					"type": "string",
+					"enum": [
+						"low",
+						"medium",
+						"high",
+						"xhigh",
+						"max",
+						"ultra"
+					],
+					"default": "low",
+					"description": "Default reasoning effort when the model picker value is not set (clamped per model).",
+					"order": 6
+				},
+				"openaiCodex.defaultMaxTokens": {
+					"type": "number",
+					"default": 0,
+					"minimum": 0,
+					"markdownDescription": "Max output tokens override. **0 = auto** (derived from context window).",
+					"order": 7
+				},
+				"openaiCodex.refreshIntervalMinutes": {
+					"type": "number",
+					"default": 60,
+					"minimum": 0,
+					"description": "How often to re-fetch models (0 = on demand only).",
+					"order": 8
+				},
+				"openaiCodex.debug": {
+					"type": "boolean",
+					"default": false,
+					"description": "Log to the \u201cCodex\u201d output channel.",
+					"order": 9
+				}
+			}
+		}
+	},
+	"scripts": {
+		"package": "vsce package --no-dependencies",
+		"install:local": "npm run package && code --install-extension ./codex-chat-provider-*.vsix --force"
+	},
+	"devDependencies": {
+		"@vscode/vsce": "^3.6.0"
+	}
+}

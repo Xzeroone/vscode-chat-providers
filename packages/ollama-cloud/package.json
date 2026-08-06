@@ -1,0 +1,143 @@
+{
+	"name": "ollama-cloud-chat-provider",
+	"displayName": "Ollama Cloud Chat Provider",
+	"description": "Language model provider for VS Code Chat using Ollama Cloud (ollama.com). Dynamic model discovery via /v1/models + /api/show. Not local Ollama.",
+	"version": "0.1.2",
+	"publisher": "xzeroone",
+	"preview": true,
+	"author": {
+		"name": "Xzeroone"
+	},
+	"license": "MIT",
+	"private": false,
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/Xzeroone/vscode-chat-providers.git",
+		"directory": "packages/ollama-cloud"
+	},
+	"bugs": {
+		"url": "https://github.com/Xzeroone/vscode-chat-providers/issues"
+	},
+	"homepage": "https://github.com/Xzeroone/vscode-chat-providers/tree/main/packages/ollama-cloud",
+	"type": "module",
+	"engines": {
+		"vscode": "^1.103.0"
+	},
+	"categories": [
+		"AI",
+		"Chat"
+	],
+	"keywords": [
+		"ollama",
+		"ollama-cloud",
+		"language-model-provider",
+		"vscode-lm",
+		"byok"
+	],
+	"activationEvents": [
+		"onLanguageModelChatProvider:ollama-cloud"
+	],
+	"main": "./out/extension.js",
+	"contributes": {
+		"languageModelChatProviders": [
+			{
+				"vendor": "ollama-cloud",
+				"displayName": "Ollama Cloud",
+				"managementCommand": "ollama-cloud.manage"
+			}
+		],
+		"commands": [
+			{
+				"command": "ollama-cloud.manage",
+				"title": "Ollama Cloud: Manage API Key"
+			},
+			{
+				"command": "ollama-cloud.setApiKey",
+				"title": "Ollama Cloud: Set API Key"
+			},
+			{
+				"command": "ollama-cloud.clearApiKey",
+				"title": "Ollama Cloud: Clear API Key"
+			},
+			{
+				"command": "ollama-cloud.refreshModels",
+				"title": "Ollama Cloud: Refresh Models"
+			}
+		],
+		"configuration": {
+			"title": "Ollama Cloud",
+			"properties": {
+				"ollamaCloud.apiKey": {
+					"type": "string",
+					"default": "",
+					"markdownDescription": "Ollama Cloud API key. Prefer **Ollama Cloud: Set API Key** (Secret Storage) over this setting. Env `OLLAMA_API_KEY` is also used when set.",
+					"order": 1
+				},
+				"ollamaCloud.baseUrl": {
+					"type": "string",
+					"default": "https://ollama.com",
+					"description": "Ollama Cloud base URL (no trailing slash). OpenAI-compatible API is at {baseUrl}/v1.",
+					"order": 2
+				},
+				"ollamaCloud.refreshIntervalMinutes": {
+					"type": "number",
+					"default": 60,
+					"minimum": 0,
+					"description": "How often to re-discover models from the API (0 = only on demand / activation).",
+					"order": 3
+				},
+				"ollamaCloud.toolsOnly": {
+					"type": "boolean",
+					"default": true,
+					"description": "Only list models that report tool-calling capability via /api/show. Turn off to list every model from /v1/models.",
+					"order": 4
+				},
+				"ollamaCloud.defaultMaxTokens": {
+					"type": "number",
+					"default": 0,
+					"minimum": 0,
+					"markdownDescription": "Override max output tokens. **`0` = auto** (models.dev `limit.output`, else derived from context). Only set a positive number to force a fixed cap for all models.",
+					"order": 5
+				},
+				"ollamaCloud.useModelsDevRegistry": {
+					"type": "boolean",
+					"default": true,
+					"markdownDescription": "Enrich discovery with [models.dev](https://models.dev) `ollama-cloud` catalog (max output tokens, reasoning effort options). Live Ollama Cloud API remains the source of model ids and capabilities.",
+					"order": 5
+				},
+				"ollamaCloud.defaultThinkingLevel": {
+					"type": "string",
+					"enum": [
+						"off",
+						"low",
+						"medium",
+						"high",
+						"max"
+					],
+					"default": "off",
+					"markdownDescription": "Default **Thinking Effort** when the model picker\u2019s value is not set. Only levels the model supports are offered (auto from `thinking` capability + family map). Per-request picker overrides this.",
+					"order": 6
+				},
+				"ollamaCloud.includeReasoningInResponse": {
+					"type": "boolean",
+					"default": false,
+					"markdownDescription": "If true, append the model\u2019s `reasoning` stream as a collapsible block after the answer. Off by default (reasoning still affects the answer via API).",
+					"order": 7
+				},
+				"ollamaCloud.debug": {
+					"type": "boolean",
+					"default": false,
+					"description": "Log requests and discovery to the \u201cOllama Cloud\u201d output channel.",
+					"order": 8
+				}
+			}
+		}
+	},
+	"scripts": {
+		"package": "vsce package --no-dependencies",
+		"install:local": "npm run package && code --install-extension ./ollama-cloud-chat-provider-*.vsix --force"
+	},
+	"devDependencies": {
+		"@vscode/vsce": "^3.6.0"
+	}
+}

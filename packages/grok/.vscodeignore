@@ -1,0 +1,10 @@
+.git/**
+.github/**
+node_modules/**
+scripts/**
+**/*.vsix
+.gitignore
+.vscodeignore
+package-lock.json
+**/*.md
+!README.md

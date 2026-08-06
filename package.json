@@ -1,0 +1,15 @@
+{
+  "name": "vscode-chat-providers",
+  "private": true,
+  "description": "Album monorepo: Ollama Cloud, Codex (ChatGPT), and Grok (xAI) VS Code Chat providers",
+  "version": "0.1.0",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Xzeroone/vscode-chat-providers.git"
+  },
+  "scripts": {
+    "package:all": "bash scripts/package-all.sh",
+    "install:all": "bash scripts/install-all.sh --local"
+  }
+}

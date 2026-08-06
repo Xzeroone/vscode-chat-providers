@@ -1,0 +1,155 @@
+{
+	"name": "grok-chat-provider",
+	"displayName": "Grok Chat Provider (xAI OAuth)",
+	"description": "VS Code Chat language models via xAI Grok subscription OAuth. Reuses Grok CLI (~/.grok) or Pi xai login \u2014 same client as official tools.",
+	"version": "0.1.0",
+	"publisher": "xzeroone",
+	"preview": true,
+	"author": {
+		"name": "Xzeroone"
+	},
+	"license": "MIT",
+	"private": false,
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/Xzeroone/vscode-chat-providers.git",
+		"directory": "packages/grok"
+	},
+	"bugs": {
+		"url": "https://github.com/Xzeroone/vscode-chat-providers/issues"
+	},
+	"homepage": "https://github.com/Xzeroone/vscode-chat-providers/tree/main/packages/grok",
+	"type": "module",
+	"engines": {
+		"vscode": "^1.103.0"
+	},
+	"categories": [
+		"AI",
+		"Chat"
+	],
+	"keywords": [
+		"grok",
+		"xai",
+		"oauth",
+		"language-model-provider",
+		"vscode-lm"
+	],
+	"activationEvents": [
+		"onLanguageModelChatProvider:xai"
+	],
+	"main": "./out/extension.js",
+	"contributes": {
+		"languageModelChatProviders": [
+			{
+				"vendor": "xai",
+				"displayName": "Grok (xAI)",
+				"managementCommand": "xai.manage"
+			}
+		],
+		"commands": [
+			{
+				"command": "xai.signIn",
+				"title": "Grok: Sign in with SuperGrok / X Premium"
+			},
+			{
+				"command": "xai.manage",
+				"title": "Grok: Manage Auth"
+			},
+			{
+				"command": "xai.refreshAuth",
+				"title": "Grok: Refresh OAuth Token"
+			},
+			{
+				"command": "xai.refreshModels",
+				"title": "Grok: Refresh Models"
+			},
+			{
+				"command": "xai.status",
+				"title": "Grok: Auth Status"
+			}
+		],
+		"configuration": {
+			"title": "Grok Chat Provider",
+			"properties": {
+				"xai.authPreference": {
+					"type": "string",
+					"enum": [
+						"auto",
+						"grok-cli",
+						"pi",
+						"secret"
+					],
+					"default": "auto",
+					"markdownDescription": "Token source: **auto** = Grok CLI `~/.grok/auth.json` \u2192 Pi `xai` \u2192 Secret Storage (palette sign-in).",
+					"order": 1
+				},
+				"xai.writeGrokAuthFile": {
+					"type": "boolean",
+					"default": true,
+					"markdownDescription": "After palette sign-in, also write `~/.grok/auth.json` (Grok CLI\u2013compatible).",
+					"order": 2
+				},
+				"xai.apiBaseUrl": {
+					"type": "string",
+					"default": "https://api.x.ai/v1",
+					"description": "OpenAI-compatible API base for chat (Grok CLI/Pi OAuth works here).",
+					"order": 3
+				},
+				"xai.modelsProxyUrl": {
+					"type": "string",
+					"default": "https://cli-chat-proxy.grok.com/v1/models",
+					"markdownDescription": "Grok CLI model catalog (reasoning efforts). Merged with `api.x.ai/v1/models`.",
+					"order": 4
+				},
+				"xai.excludeImageModels": {
+					"type": "boolean",
+					"default": true,
+					"description": "Hide grok-imagine-* image/video models from the chat picker.",
+					"order": 5
+				},
+				"xai.defaultThinkingLevel": {
+					"type": "string",
+					"enum": [
+						"low",
+						"medium",
+						"high"
+					],
+					"default": "low",
+					"description": "Default reasoning effort when the model supports it.",
+					"order": 6
+				},
+				"xai.defaultMaxTokens": {
+					"type": "number",
+					"default": 0,
+					"minimum": 0,
+					"markdownDescription": "Max output tokens. **0 = auto** (derived from context).",
+					"order": 7
+				},
+				"xai.refreshIntervalMinutes": {
+					"type": "number",
+					"default": 60,
+					"minimum": 0,
+					"order": 8
+				},
+				"xai.includeReasoningInResponse": {
+					"type": "boolean",
+					"default": false,
+					"markdownDescription": "Append streamed `reasoning_content` as a collapsible block.",
+					"order": 9
+				},
+				"xai.debug": {
+					"type": "boolean",
+					"default": false,
+					"order": 10
+				}
+			}
+		}
+	},
+	"scripts": {
+		"package": "vsce package --no-dependencies",
+		"install:local": "npm run package && code --install-extension ./grok-chat-provider-*.vsix --force"
+	},
+	"devDependencies": {
+		"@vscode/vsce": "^3.6.0"
+	}
+}

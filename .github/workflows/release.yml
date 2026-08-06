@@ -1,0 +1,79 @@
+name: Release all VSIX
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Package all extensions
+        run: |
+          mkdir -p dist
+          for pkg in ollama-cloud codex grok; do
+            echo "=== $pkg ==="
+            cd "packages/$pkg"
+            npm install --no-package-lock
+            npx vsce package --no-dependencies
+            mv -f ./*.vsix ../../dist/
+            cd ../..
+          done
+          ls -la dist/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vsix-all
+          path: dist/*.vsix
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          NOTES="$(cat <<EOF
+          ## VS Code Chat Providers ${TAG}
+
+          ### Install all
+          \`\`\`bash
+          curl -fsSL https://raw.githubusercontent.com/Xzeroone/vscode-chat-providers/main/scripts/install-all.sh | bash
+          \`\`\`
+
+          ### Install one
+          \`\`\`bash
+          curl -fsSL https://raw.githubusercontent.com/Xzeroone/vscode-chat-providers/main/scripts/install.sh | bash -s -- codex
+          # ollama-cloud | codex | grok
+          \`\`\`
+
+          ### Command Palette
+          Download a \`.vsix\` below → **Extensions: Install from VSIX…**
+
+          | Asset | Vendor |
+          |-------|--------|
+          | ollama-cloud-chat-provider-*.vsix | Ollama Cloud |
+          | codex-chat-provider-*.vsix | Codex (ChatGPT) |
+          | grok-chat-provider-*.vsix | Grok (xAI) |
+          EOF
+          )"
+          NOTES="$(printf '%s\n' "$NOTES" | sed 's/^[[:space:]]*//')"
+          gh release create "$TAG" dist/*.vsix \
+            --title "VS Code Chat Providers ${TAG}" \
+            --notes "$NOTES" \
+            --latest \
+            || {
+              for f in dist/*.vsix; do
+                gh release upload "$TAG" "$f" --clobber
+              done
+            }
