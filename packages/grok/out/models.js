@@ -43,18 +43,22 @@ function normalize(raw, defaultMaxTokens) {
 	/** @type {string[]} */
 	let levels = [];
 	let defaultThinking;
+	// Only expose effort when the catalog explicitly lists values or the flag.
+	// Do NOT invent levels from the model id name — e.g. "grok-*-reasoning"
+	// models often reject the reasoning_effort parameter on api.x.ai.
 	if (Array.isArray(raw.reasoning_efforts) && raw.reasoning_efforts.length) {
 		for (const e of raw.reasoning_efforts) {
 			const v = typeof e === 'string' ? e : e?.value || e?.id;
 			if (typeof v === 'string') levels.push(v);
 			if (e?.default && typeof v === 'string') defaultThinking = v;
 		}
-	} else if (raw.supports_reasoning_effort || /reasoning/i.test(id)) {
+	} else if (raw.supports_reasoning_effort === true) {
+		// Explicit flag but no enum — safe default ladder (Grok CLI uses these)
 		levels = ['low', 'medium', 'high'];
-		defaultThinking = raw.reasoning_effort || 'low';
+		defaultThinking =
+			typeof raw.reasoning_effort === 'string' ? raw.reasoning_effort : 'low';
 	}
 
-	// Known non-reasoning id patterns
 	if (/non-reasoning/i.test(id)) {
 		levels = [];
 		defaultThinking = undefined;
@@ -185,7 +189,8 @@ export async function discoverModels(opts) {
 					{ value: 'low' },
 				],
 			},
-			{ id: 'grok-4.3', name: 'Grok 4.3', context_window: 1000000, supports_reasoning_effort: true },
+			// No invented efforts — only when live catalog says so
+			{ id: 'grok-4.3', name: 'Grok 4.3', context_window: 1000000 },
 		]) {
 			const n = normalize(m, defaultMaxTokens);
 			if (n) byId.set(n.id, n);
