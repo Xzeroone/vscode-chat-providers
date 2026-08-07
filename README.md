@@ -6,7 +6,7 @@ Album repo for **native VS Code Language Model Chat providers** (host Chat UI, n
 |---------|----------------|------|------------|
 | [`packages/ollama-cloud`](./packages/ollama-cloud) | **Ollama Cloud** | API key | `xzeroone.ollama-cloud-chat-provider` |
 | [`packages/codex`](./packages/codex) | **Codex (ChatGPT)** | ChatGPT OAuth (Codex CLI / Pi / palette) | `xzeroone.codex-chat-provider` |
-| [`packages/grok`](./packages/grok) | **Grok (xAI)** | SuperGrok OAuth (Grok CLI / Pi / palette) | `xzeroone.grok-chat-provider` |
+| [`packages/grok`](./packages/grok) | **Grok (xAI OAuth)** (`vendor: grok`) | SuperGrok OAuth (Grok CLI / Pi / palette) | `xzeroone.grok-chat-provider` |
 
 Related (separate repo): [vscode-pi-chat-provider](https://github.com/Xzeroone/vscode-pi-chat-provider) — Pi as **agent runtime** behind Chat.
 
