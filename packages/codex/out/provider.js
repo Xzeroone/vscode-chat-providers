@@ -7,28 +7,13 @@ import { discoverModels } from './models.js';
 import { convertMessages, convertTools, convertToolChoice } from './messages.js';
 import { streamCodexResponse } from './client.js';
 import { debug, logAlways } from './debug.js';
-import {
-	pickAutoThinkingLevel,
-	extractTextFromMessages,
-	lowestEffort,
-} from './auto-thinking.js';
 
 const THINKING_LABELS = {
-	auto: 'Auto',
 	low: 'Low',
 	medium: 'Medium',
 	high: 'High',
 	xhigh: 'Extra High',
 	max: 'Max',
-	ultra: 'Ultra',
-};
-const THINKING_DESCS = {
-	auto: 'Start low; raise when the task looks hard (recommended for Agent)',
-	low: 'Light reasoning',
-	medium: 'Moderate',
-	high: 'Deep',
-	xhigh: 'Extra deep',
-	max: 'Maximum',
 	ultra: 'Ultra',
 };
 
@@ -60,7 +45,7 @@ export class CodexChatProvider {
 		return {
 			clientVersion: /** @type {string} */ (cfg.get('clientVersion') || ''),
 			hideHidden: cfg.get('hideHiddenModels') !== false,
-			defaultThinkingLevel: /** @type {string} */ (cfg.get('defaultThinkingLevel') || 'auto'),
+			defaultThinkingLevel: /** @type {string} */ (cfg.get('defaultThinkingLevel') || 'low'),
 			defaultMaxTokens: /** @type {number} */ (cfg.get('defaultMaxTokens') ?? 0),
 			refreshIntervalMinutes: /** @type {number} */ (cfg.get('refreshIntervalMinutes') ?? 60),
 		};
@@ -136,9 +121,11 @@ export class CodexChatProvider {
 	 */
 	toModelInfo(m, defaultThinking) {
 		const levels = m.thinkingLevels?.length ? m.thinkingLevels : ['low', 'medium', 'high'];
-		const uiLevels = ['auto', ...levels];
-		const modelDefault =
-			defaultThinking === 'auto' || levels.includes(defaultThinking) ? defaultThinking : 'auto';
+		const modelDefault = levels.includes(m.defaultThinking)
+			? m.defaultThinking
+			: levels.includes(defaultThinking)
+				? defaultThinking
+				: levels[0];
 
 		/** @type {vscode.LanguageModelChatInformation & { configurationSchema?: object }} */
 		const info = {
@@ -150,33 +137,31 @@ export class CodexChatProvider {
 			maxOutputTokens: m.maxTokens,
 			tooltip: [
 				'Codex · ChatGPT OAuth',
-				`thinking: auto, ${levels.join(', ')}`,
+				`thinking: ${levels.join(', ')}`,
 				m.imageInput ? 'vision' : null,
 				`ctx ${m.contextWindow}`,
 			]
 				.filter(Boolean)
 				.join(' · '),
-			detail: `effort · auto/${levels.join('/')}`,
+			detail: `effort · ${levels.join('/')}`,
 			capabilities: {
 				toolCalling: m.toolCalling !== false,
 				imageInput: Boolean(m.imageInput),
 			},
 		};
 
-		if (uiLevels.length >= 2) {
+		if (levels.length >= 2) {
 			info.configurationSchema = {
 				type: 'object',
 				properties: {
 					thinkingLevel: {
 						type: 'string',
 						title: 'Thinking Effort',
-						description:
-							'Auto = lowest by default, raises for complex tasks (recommended in Agent)',
+						description: 'Codex reasoning effort for this model',
 						group: 'navigation',
-						enum: uiLevels,
+						enum: levels,
 						default: modelDefault,
-						enumItemLabels: uiLevels.map((l) => THINKING_LABELS[l] || l),
-						enumDescriptions: uiLevels.map((l) => THINKING_DESCS[l] || l),
+						enumItemLabels: levels.map((l) => THINKING_LABELS[l] || l),
 					},
 				},
 			};
@@ -188,12 +173,8 @@ export class CodexChatProvider {
 	/**
 	 * @param {object} options
 	 * @param {CodexModel | undefined} meta
-	 * @param {readonly any[]} [messages]
 	 */
-	resolveThinkingLevel(options, meta, messages) {
-		const levels = meta?.thinkingLevels?.length
-			? meta.thinkingLevels
-			: ['low', 'medium', 'high'];
+	resolveThinkingLevel(options, meta) {
 		const fromConfig =
 			options?.modelConfiguration?.thinkingLevel ??
 			options?.configuration?.thinkingLevel ??
@@ -203,23 +184,14 @@ export class CodexChatProvider {
 		let level =
 			typeof fromConfig === 'string' && fromConfig.trim()
 				? fromConfig.trim().toLowerCase()
-				: this.getConfig().defaultThinkingLevel || 'auto';
+				: meta?.defaultThinking || this.getConfig().defaultThinkingLevel;
 
-		if (level === 'auto' || !levels.includes(level)) {
-			if (level !== 'auto' && levels.includes(level)) {
-				/* keep fixed */
-			} else {
-				const picked = pickAutoThinkingLevel({
-					text: extractTextFromMessages(messages || []),
-					messageCount: messages?.length ?? 1,
-					toolCount: options?.tools?.length ?? 0,
-					availableLevels: levels,
-				});
-				debug('[auto-thinking]', picked);
-				level = picked.level;
-			}
+		const levels = meta?.thinkingLevels;
+		if (levels?.length && !levels.includes(level)) {
+			level = levels.includes(meta.defaultThinking)
+				? meta.defaultThinking
+				: levels[0];
 		}
-		if (!levels.includes(level)) level = lowestEffort(levels);
 		return level;
 	}
 
@@ -237,7 +209,7 @@ export class CodexChatProvider {
 		try {
 			const tokens = await getValidTokens(controller.signal);
 			const meta = this._byId.get(model.id);
-			const effort = this.resolveThinkingLevel(options, meta, messages);
+			const effort = this.resolveThinkingLevel(options, meta);
 			const { instructions, input } = convertMessages(messages);
 			const tools = convertTools(options.tools);
 			const toolChoice = convertToolChoice(options.toolMode, Boolean(tools?.length));

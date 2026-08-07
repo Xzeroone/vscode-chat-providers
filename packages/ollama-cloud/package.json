@@ -2,7 +2,7 @@
 	"name": "ollama-cloud-chat-provider",
 	"displayName": "Ollama Cloud Chat Provider",
 	"description": "Language model provider for VS Code Chat using Ollama Cloud (ollama.com). Dynamic model discovery via /v1/models + /api/show. Not local Ollama.",
-	"version": "0.1.3",
+	"version": "0.1.4",
 	"publisher": "xzeroone",
 	"preview": true,
 	"author": {
@@ -108,16 +108,15 @@
 				"ollamaCloud.defaultThinkingLevel": {
 					"type": "string",
 					"enum": [
-						"auto",
 						"off",
 						"low",
 						"medium",
 						"high",
 						"max"
 					],
-					"default": "auto",
-					"markdownDescription": "Default **Thinking Effort**. **auto** = lowest/off by default, raises for complex/agent tasks. Per-request picker overrides this.",
-					"order": 6
+					"default": "off",
+					"order": 6,
+					"description": "Default Thinking Effort when the model picker value is not set. Only levels the model supports are offered."
 				},
 				"ollamaCloud.includeReasoningInResponse": {
 					"type": "boolean",

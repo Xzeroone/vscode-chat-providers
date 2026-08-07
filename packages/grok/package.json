@@ -2,7 +2,7 @@
 	"name": "grok-chat-provider",
 	"displayName": "Grok Chat Provider (xAI OAuth)",
 	"description": "VS Code Chat language models via xAI Grok subscription OAuth. Reuses Grok CLI (~/.grok) or Pi xai login \u2014 same client as official tools.",
-	"version": "0.1.3",
+	"version": "0.1.4",
 	"publisher": "xzeroone",
 	"preview": true,
 	"author": {
@@ -110,14 +110,13 @@
 				"xai.defaultThinkingLevel": {
 					"type": "string",
 					"enum": [
-						"auto",
 						"low",
 						"medium",
 						"high"
 					],
-					"default": "auto",
-					"markdownDescription": "Default thinking effort. **auto** = lowest, raises for complex/agent tasks (no extra model call).",
-					"order": 6
+					"default": "low",
+					"order": 6,
+					"description": "Default reasoning effort when the model supports it."
 				},
 				"xai.defaultMaxTokens": {
 					"type": "number",
