@@ -3,10 +3,16 @@
  *  1. Grok CLI proxy catalog (reasoning_efforts) — primary metadata
  *  2. api.x.ai/v1/models — broader list
  *  3. ~/.grok/models_cache.json
+ *
+ * Max output is auto-resolved from catalog (when trustworthy) or context.
  */
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import {
+	catalogMaxOutput,
+	resolveMaxOutputTokens,
+} from './token-limits.js';
 
 /**
  * @typedef {{
@@ -14,6 +20,7 @@ import * as path from 'node:path';
  *   name: string,
  *   contextWindow: number,
  *   maxTokens: number,
+ *   maxSource?: string,
  *   thinkingLevels: string[],
  *   defaultThinking?: string,
  *   supportsThinking: boolean,
@@ -35,10 +42,14 @@ function normalize(raw, defaultMaxTokens) {
 		(typeof raw.context_length === 'number' && raw.context_length) ||
 		256_000;
 
-	let maxTokens =
-		typeof defaultMaxTokens === 'number' && defaultMaxTokens > 0
-			? defaultMaxTokens
-			: Math.min(65_536, Math.max(8_192, Math.floor(ctx * 0.2)));
+	const { maxTokens, maxSource } = resolveMaxOutputTokens({
+		contextWindow: ctx,
+		catalogMax: catalogMaxOutput(raw),
+		settingMax:
+			typeof defaultMaxTokens === 'number' && defaultMaxTokens > 0
+				? defaultMaxTokens
+				: undefined,
+	});
 
 	/** @type {string[]} */
 	let levels = [];
@@ -69,6 +80,7 @@ function normalize(raw, defaultMaxTokens) {
 		name: raw.name || raw.display_name || id,
 		contextWindow: ctx,
 		maxTokens,
+		maxSource,
 		thinkingLevels: levels,
 		defaultThinking: defaultThinking || levels[0],
 		supportsThinking: levels.length > 0,

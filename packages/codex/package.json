@@ -2,7 +2,7 @@
 	"name": "codex-chat-provider",
 	"displayName": "Codex Chat Provider (ChatGPT OAuth)",
 	"description": "VS Code Chat language models via OpenAI Codex / ChatGPT subscription OAuth. Reuses ~/.codex or Pi openai-codex login \u2014 no API key.",
-	"version": "0.1.4",
+	"version": "0.1.5",
 	"publisher": "xzeroone",
 	"preview": true,
 	"author": {

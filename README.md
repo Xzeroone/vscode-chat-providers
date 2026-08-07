@@ -67,6 +67,17 @@ Per-model schema defaults (what Agents use when you do not pick a level):
 
 No adaptive auto-router — fixed smart defaults only. Override anytime in the model’s Thinking Effort control or the provider’s `defaultThinkingLevel` setting (fallback).
 
+### Max output tokens (auto discovery)
+
+On model discovery each provider resolves `maxOutputTokens` automatically:
+
+1. Catalog / models.dev **output** limit when it looks real (not “same as context”)
+2. Else derive from **context** (~20–25%)
+3. Always hard-cap at **65536** (Ollama Cloud API rejects higher; Codex/Grok use the same ceiling)
+4. Request path clamps again so a stale host value cannot send `max_tokens: 131072`
+
+`defaultMaxTokens: 0` means fully auto. A positive setting is a force override, still hard-capped.
+
 ---
 
 ## Layout

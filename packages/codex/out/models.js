@@ -1,9 +1,14 @@
 /**
  * Discover Codex models: live API → ~/.codex/models_cache.json → static fallback.
+ * Max output is auto-resolved from catalog (when trustworthy) or context.
  */
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import {
+	catalogMaxOutput,
+	resolveMaxOutputTokens,
+} from './token-limits.js';
 
 const DEFAULT_CLIENT_VERSION = '0.146.0';
 const MODELS_URL = 'https://chatgpt.com/backend-api/codex/models';
@@ -14,6 +19,7 @@ const MODELS_URL = 'https://chatgpt.com/backend-api/codex/models';
  *   name: string,
  *   contextWindow: number,
  *   maxTokens: number,
+ *   maxSource?: string,
  *   thinkingLevels: string[],
  *   defaultThinking: string,
  *   imageInput: boolean,
@@ -73,10 +79,14 @@ function normalizeModel(raw, defaultMaxTokens) {
 		(typeof raw.max_context_window === 'number' && raw.max_context_window) ||
 		272_000;
 
-	let maxTokens =
-		typeof defaultMaxTokens === 'number' && defaultMaxTokens > 0
-			? defaultMaxTokens
-			: Math.min(65_536, Math.max(8_192, Math.floor(ctx * 0.2)));
+	const { maxTokens, maxSource } = resolveMaxOutputTokens({
+		contextWindow: ctx,
+		catalogMax: catalogMaxOutput(raw),
+		settingMax:
+			typeof defaultMaxTokens === 'number' && defaultMaxTokens > 0
+				? defaultMaxTokens
+				: undefined,
+	});
 
 	const modalities = raw.input_modalities || [];
 	const imageInput = Array.isArray(modalities)
@@ -93,6 +103,7 @@ function normalizeModel(raw, defaultMaxTokens) {
 		name: raw.display_name || raw.title || id,
 		contextWindow: ctx,
 		maxTokens,
+		maxSource,
 		thinkingLevels: levels.length ? levels : ['low', 'medium', 'high'],
 		defaultThinking,
 		imageInput,

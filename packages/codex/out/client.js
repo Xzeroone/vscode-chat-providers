@@ -4,6 +4,7 @@
  */
 import * as os from 'node:os';
 import { randomUUID } from 'node:crypto';
+import { clampMaxTokens } from './token-limits.js';
 
 const DEFAULT_BASE = 'https://chatgpt.com/backend-api';
 
@@ -78,8 +79,12 @@ export async function streamCodexResponse(opts) {
 		};
 	}
 
-	if (typeof maxTokens === 'number' && maxTokens > 0) {
-		body.max_output_tokens = maxTokens;
+	const safeMax =
+		typeof maxTokens === 'number' && maxTokens > 0
+			? clampMaxTokens(maxTokens)
+			: undefined;
+	if (safeMax) {
+		body.max_output_tokens = safeMax;
 	}
 
 	debug('[codex] POST', url, {
@@ -87,6 +92,7 @@ export async function streamCodexResponse(opts) {
 		inputItems: input.length,
 		tools: tools?.length ?? 0,
 		effort: reasoningEffort,
+		max_output_tokens: safeMax,
 	});
 
 	const res = await fetchFn(url, {

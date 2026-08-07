@@ -2,6 +2,7 @@
  * xAI chat.completions streaming (api.x.ai/v1).
  * No vscode dependency.
  */
+import { clampMaxTokens } from './token-limits.js';
 
 /** @type {((...args: unknown[]) => void) | undefined} */
 let _debug;
@@ -46,6 +47,7 @@ export async function streamChat(opts) {
 		onToolCallDelta,
 	} = opts;
 
+	const safeMaxTokens = clampMaxTokens(maxTokens);
 	const base = apiBaseUrl.replace(/\/+$/, '');
 	const url = `${base}/chat/completions`;
 
@@ -54,7 +56,7 @@ export async function streamChat(opts) {
 		model,
 		messages,
 		stream: true,
-		max_tokens: maxTokens,
+		max_tokens: safeMaxTokens,
 	};
 	if (tools?.length) {
 		body.tools = tools;
@@ -64,7 +66,13 @@ export async function streamChat(opts) {
 		body.reasoning_effort = reasoningEffort;
 	}
 
-	debug('[chat] POST', url, { model, messages: messages.length, tools: tools?.length ?? 0, reasoningEffort });
+	debug('[chat] POST', url, {
+		model,
+		messages: messages.length,
+		tools: tools?.length ?? 0,
+		reasoningEffort,
+		max_tokens: safeMaxTokens,
+	});
 
 	const res = await fetchFn(url, {
 		method: 'POST',

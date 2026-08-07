@@ -8,6 +8,10 @@ import { convertMessages, convertTools, convertToolChoice } from './messages.js'
 import { streamChat } from './client.js';
 import { debug, logAlways } from './debug.js';
 import { smartDefaultThinkingLevel } from './default-effort.js';
+import {
+	clampMaxTokens,
+	HARD_MAX_OUTPUT_TOKENS,
+} from './token-limits.js';
 
 const LABELS = { low: 'Low', medium: 'Medium', high: 'High' };
 
@@ -133,6 +137,8 @@ export class GrokChatProvider {
 		const modelDefault = levels.length
 			? this.pickDefaultThinking(levels, m.defaultThinking, defaultThinking)
 			: undefined;
+		const maxOut = clampMaxTokens(m.maxTokens);
+		const maxIn = Math.max(1024, (m.contextWindow || 128_000) - maxOut);
 
 		/** @type {vscode.LanguageModelChatInformation & { configurationSchema?: object }} */
 		const info = {
@@ -140,16 +146,19 @@ export class GrokChatProvider {
 			name: m.name || m.id,
 			family: m.id.split('-').slice(0, 2).join('-') || m.id,
 			version: m.id,
-			maxInputTokens: Math.max(1024, m.contextWindow - m.maxTokens),
-			maxOutputTokens: m.maxTokens,
+			maxInputTokens: maxIn,
+			maxOutputTokens: maxOut,
 			tooltip: [
 				'Grok · xAI OAuth',
 				levels.length ? `thinking: ${levels.join(', ')}` : null,
 				`ctx ${m.contextWindow}`,
+				`max_out ${maxOut}${m.maxSource ? ` (${m.maxSource})` : ''}`,
 			]
 				.filter(Boolean)
 				.join(' · '),
-			detail: levels.length ? `effort · ${levels.join('/')}` : 'x.ai',
+			detail: levels.length
+				? `effort · ${levels.join('/')} · out:${maxOut}`
+				: `out:${maxOut}`,
 			capabilities: {
 				toolCalling: m.toolCalling !== false,
 				imageInput: false,
@@ -229,7 +238,16 @@ export class GrokChatProvider {
 			/** @type {string[]} */
 			const reasoning = [];
 
-			debug('[provider]', { model: model.id, effort });
+			const maxTokens = clampMaxTokens(
+				(typeof model.maxOutputTokens === 'number' && model.maxOutputTokens > 0
+					? model.maxOutputTokens
+					: undefined) ||
+					meta?.maxTokens ||
+					HARD_MAX_OUTPUT_TOKENS,
+			);
+			const safeMax = Math.min(maxTokens, meta?.maxTokens || HARD_MAX_OUTPUT_TOKENS);
+
+			debug('[provider]', { model: model.id, effort, maxTokens: safeMax });
 
 			await streamChat({
 				access: tokens.access,
@@ -239,7 +257,7 @@ export class GrokChatProvider {
 				tools,
 				toolChoice,
 				reasoningEffort: effort,
-				maxTokens: model.maxOutputTokens || meta?.maxTokens,
+				maxTokens: safeMax,
 				signal: controller.signal,
 				onText: (d) => progress.report(new vscode.LanguageModelTextPart(d)),
 				onReasoning: (d) => reasoning.push(d),

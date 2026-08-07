@@ -8,6 +8,10 @@ import { convertMessages, convertTools, convertToolChoice } from './messages.js'
 import { streamCodexResponse } from './client.js';
 import { debug, logAlways } from './debug.js';
 import { smartDefaultThinkingLevel } from './default-effort.js';
+import {
+	clampMaxTokens,
+	HARD_MAX_OUTPUT_TOKENS,
+} from './token-limits.js';
 
 const THINKING_LABELS = {
 	low: 'Low',
@@ -137,6 +141,8 @@ export class CodexChatProvider {
 	toModelInfo(m, defaultThinking) {
 		const levels = m.thinkingLevels?.length ? m.thinkingLevels : ['low', 'medium', 'high'];
 		const modelDefault = this.pickDefaultThinking(levels, m.defaultThinking, defaultThinking);
+		const maxOut = clampMaxTokens(m.maxTokens);
+		const maxIn = Math.max(1024, (m.contextWindow || 128_000) - maxOut);
 
 		/** @type {vscode.LanguageModelChatInformation & { configurationSchema?: object }} */
 		const info = {
@@ -144,17 +150,18 @@ export class CodexChatProvider {
 			name: m.name || m.id,
 			family: m.id.replace(/-\w+$/, '') || m.id,
 			version: m.id,
-			maxInputTokens: Math.max(1024, m.contextWindow - m.maxTokens),
-			maxOutputTokens: m.maxTokens,
+			maxInputTokens: maxIn,
+			maxOutputTokens: maxOut,
 			tooltip: [
 				'Codex · ChatGPT OAuth',
 				`thinking: ${levels.join(', ')}`,
 				m.imageInput ? 'vision' : null,
 				`ctx ${m.contextWindow}`,
+				`max_out ${maxOut}${m.maxSource ? ` (${m.maxSource})` : ''}`,
 			]
 				.filter(Boolean)
 				.join(' · '),
-			detail: `effort · ${levels.join('/')}`,
+			detail: `effort · ${levels.join('/')} · out:${maxOut}`,
 			capabilities: {
 				toolCalling: m.toolCalling !== false,
 				imageInput: Boolean(m.imageInput),
@@ -238,7 +245,22 @@ export class CodexChatProvider {
 				return;
 			}
 
-			debug('[provider]', { model: model.id, effort, tools: tools?.length ?? 0 });
+			const maxTokens = clampMaxTokens(
+				(typeof model.maxOutputTokens === 'number' && model.maxOutputTokens > 0
+					? model.maxOutputTokens
+					: undefined) ||
+					meta?.maxTokens ||
+					HARD_MAX_OUTPUT_TOKENS,
+			);
+			// Prefer live discovery cap when host value is stale/high
+			const safeMax = Math.min(maxTokens, meta?.maxTokens || HARD_MAX_OUTPUT_TOKENS);
+
+			debug('[provider]', {
+				model: model.id,
+				effort,
+				tools: tools?.length ?? 0,
+				maxTokens: safeMax,
+			});
 
 			await streamCodexResponse({
 				access: tokens.access,
@@ -249,7 +271,7 @@ export class CodexChatProvider {
 				tools,
 				toolChoice,
 				reasoningEffort: effort,
-				maxTokens: model.maxOutputTokens || meta?.maxTokens,
+				maxTokens: safeMax,
 				signal: controller.signal,
 				onText: (delta) => {
 					progress.report(new vscode.LanguageModelTextPart(delta));

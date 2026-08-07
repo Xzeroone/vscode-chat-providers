@@ -2,7 +2,7 @@
 	"name": "ollama-cloud-chat-provider",
 	"displayName": "Ollama Cloud Chat Provider",
 	"description": "Language model provider for VS Code Chat using Ollama Cloud (ollama.com). Dynamic model discovery via /v1/models + /api/show. Not local Ollama.",
-	"version": "0.1.6",
+	"version": "0.1.7",
 	"publisher": "xzeroone",
 	"preview": true,
 	"author": {

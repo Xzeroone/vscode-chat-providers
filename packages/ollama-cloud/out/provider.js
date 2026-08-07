@@ -185,13 +185,13 @@ export class OllamaCloudChatProvider {
 					: null,
 				m.imageInput ? 'vision' : null,
 				`ctx ${m.contextWindow}`,
-				`max_out ${m.maxTokens}${m.meta?.maxSource ? ` (${m.meta.maxSource})` : ''}`,
+				`max_out ${maxOut}${m.meta?.maxSource ? ` (${m.meta.maxSource})` : ''}`,
 			]
 				.filter(Boolean)
 				.join(' · '),
 			detail: [
 				m.thinking && levels.length ? `think:${levels.join('/')}` : null,
-				`out:${m.maxTokens}`,
+				`out:${maxOut}`,
 			]
 				.filter(Boolean)
 				.join(' · ') || 'ollama.com',
