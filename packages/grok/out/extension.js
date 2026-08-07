@@ -21,7 +21,11 @@ export function activate(context) {
 	const provider = new GrokChatProvider();
 
 	context.subscriptions.push(
-		vscode.lm.registerLanguageModelChatProvider('xai', provider),
+		// Vendor id must NOT be 'xai' — GitHub Copilot Chat BYOK already
+		// registers 'xai' and VS Code rejects the second registration
+		// ("Chat model provider for vendor xai is already registered"),
+		// which makes models appear then vanish / show as duplicates.
+		vscode.lm.registerLanguageModelChatProvider('grok', provider),
 	);
 
 	context.subscriptions.push(

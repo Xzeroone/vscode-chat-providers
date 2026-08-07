@@ -5,7 +5,7 @@ Native **Language Model Chat Provider** using your **SuperGrok / X Premium** sub
 | | |
 |--|--|
 | Extension id | `xzeroone.grok-chat-provider` |
-| Model picker | **Grok (xAI)** |
+| Model picker | **Grok (xAI OAuth)** (vendor id `grok`, not `xai` — avoids clash with Copilot BYOK) |
 | OAuth client | `b1a00492-073a-47ea-816f-4c329264a828` (official) |
 
 ---

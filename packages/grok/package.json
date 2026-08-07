@@ -2,7 +2,7 @@
 	"name": "grok-chat-provider",
 	"displayName": "Grok Chat Provider (xAI OAuth)",
 	"description": "VS Code Chat language models via xAI Grok subscription OAuth. Reuses Grok CLI (~/.grok) or Pi xai login \u2014 same client as official tools.",
-	"version": "0.1.1",
+	"version": "0.1.2",
 	"publisher": "xzeroone",
 	"preview": true,
 	"author": {
@@ -35,14 +35,14 @@
 		"vscode-lm"
 	],
 	"activationEvents": [
-		"onLanguageModelChatProvider:xai"
+		"onLanguageModelChatProvider:grok"
 	],
 	"main": "./out/extension.js",
 	"contributes": {
 		"languageModelChatProviders": [
 			{
-				"vendor": "xai",
-				"displayName": "Grok (xAI)",
+				"vendor": "grok",
+				"displayName": "Grok (xAI OAuth)",
 				"managementCommand": "xai.manage"
 			}
 		],
