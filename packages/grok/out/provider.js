@@ -7,6 +7,7 @@ import { discoverModels } from './models.js';
 import { convertMessages, convertTools, convertToolChoice } from './messages.js';
 import { streamChat } from './client.js';
 import { debug, logAlways } from './debug.js';
+import { smartDefaultThinkingLevel } from './default-effort.js';
 
 const LABELS = { low: 'Low', medium: 'Medium', high: 'High' };
 
@@ -41,7 +42,7 @@ export class GrokChatProvider {
 				cfg.get('modelsProxyUrl') || 'https://cli-chat-proxy.grok.com/v1/models'
 			),
 			excludeImageModels: cfg.get('excludeImageModels') !== false,
-			defaultThinkingLevel: /** @type {string} */ (cfg.get('defaultThinkingLevel') || 'low'),
+			defaultThinkingLevel: /** @type {string} */ (cfg.get('defaultThinkingLevel') || 'medium'),
 			defaultMaxTokens: /** @type {number} */ (cfg.get('defaultMaxTokens') ?? 0),
 			refreshIntervalMinutes: /** @type {number} */ (cfg.get('refreshIntervalMinutes') ?? 60),
 			includeReasoningInResponse: cfg.get('includeReasoningInResponse') === true,
@@ -113,13 +114,25 @@ export class GrokChatProvider {
 	 * @param {GrokModel} m
 	 * @param {string} defaultThinking
 	 */
+	/**
+	 * Prefer ladder-aware default: medium when available, high for off→high.
+	 * @param {string[]} levels
+	 * @param {string | undefined} catalogDefault
+	 * @param {string} userDefault
+	 */
+	pickDefaultThinking(levels, catalogDefault, userDefault) {
+		const smart = smartDefaultThinkingLevel(levels);
+		if (smart && levels.includes(smart)) return smart;
+		if (catalogDefault && levels.includes(catalogDefault)) return catalogDefault;
+		if (userDefault && levels.includes(userDefault)) return userDefault;
+		return levels[0];
+	}
+
 	toModelInfo(m, defaultThinking) {
 		const levels = m.thinkingLevels || [];
-		const modelDefault = levels.includes(m.defaultThinking || '')
-			? m.defaultThinking
-			: levels.includes(defaultThinking)
-				? defaultThinking
-				: levels[0];
+		const modelDefault = levels.length
+			? this.pickDefaultThinking(levels, m.defaultThinking, defaultThinking)
+			: undefined;
 
 		/** @type {vscode.LanguageModelChatInformation & { configurationSchema?: object }} */
 		const info = {
@@ -143,7 +156,7 @@ export class GrokChatProvider {
 			},
 		};
 
-		if (levels.length >= 2) {
+		if (levels.length >= 2 && modelDefault) {
 			info.configurationSchema = {
 				type: 'object',
 				properties: {
@@ -172,13 +185,21 @@ export class GrokChatProvider {
 			options?.configuration?.thinkingLevel ??
 			options?.modelOptions?.thinkingLevel ??
 			options?.modelOptions?.reasoningEffort;
+		const levels = meta?.thinkingLevels || [];
 		let level =
 			typeof from === 'string' && from.trim()
 				? from.trim().toLowerCase()
-				: meta?.defaultThinking || this.getConfig().defaultThinkingLevel;
-		const levels = meta?.thinkingLevels;
-		if (levels?.length && !levels.includes(level)) {
-			level = levels.includes(meta.defaultThinking) ? meta.defaultThinking : levels[0];
+				: this.pickDefaultThinking(
+						levels,
+						meta?.defaultThinking,
+						this.getConfig().defaultThinkingLevel,
+					);
+		if (levels.length && !levels.includes(level)) {
+			level = this.pickDefaultThinking(
+				levels,
+				meta?.defaultThinking,
+				this.getConfig().defaultThinkingLevel,
+			);
 		}
 		return meta?.supportsThinking ? level : undefined;
 	}

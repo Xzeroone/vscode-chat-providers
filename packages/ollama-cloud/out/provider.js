@@ -11,6 +11,7 @@ import {
 	THINKING_LABELS,
 	THINKING_DESCRIPTIONS,
 } from './thinking-levels.js';
+import { smartDefaultThinkingLevel } from './default-effort.js';
 import { debug, logAlways } from './debug.js';
 
 /**
@@ -50,7 +51,8 @@ export class OllamaCloudChatProvider {
 			// 0 / unset = fully auto (models.dev or derived from context)
 			defaultMaxTokens: /** @type {number} */ (cfg.get('defaultMaxTokens') ?? 0),
 			refreshIntervalMinutes: /** @type {number} */ (cfg.get('refreshIntervalMinutes') ?? 60),
-			defaultThinkingLevel: /** @type {string} */ (cfg.get('defaultThinkingLevel') || 'off'),
+			// Fallback only; per-model schema default prefers medium / high via smartDefaultThinkingLevel
+			defaultThinkingLevel: /** @type {string} */ (cfg.get('defaultThinkingLevel') || 'medium'),
 			includeReasoningInResponse: cfg.get('includeReasoningInResponse') === true,
 			useRegistry: cfg.get('useModelsDevRegistry') !== false,
 		};
@@ -141,11 +143,23 @@ export class OllamaCloudChatProvider {
 	 * @param {string} defaultThinking
 	 * @returns {vscode.LanguageModelChatInformation & { configurationSchema?: object }}
 	 */
+	/**
+	 * Prefer ladder-aware default: medium when available, high for off→high.
+	 * @param {string[]} levels
+	 * @param {string} userDefault
+	 */
+	pickDefaultThinking(levels, userDefault) {
+		const smart = smartDefaultThinkingLevel(levels);
+		if (smart && levels.includes(smart)) return smart;
+		if (userDefault && levels.includes(userDefault)) return userDefault;
+		return clampThinkingLevel(levels, userDefault || 'medium');
+	}
+
 	toModelInfo(m, defaultThinking) {
 		const family = m.id.split(':')[0] || m.id;
 		const levels = m.thinkingLevels ?? [];
 		const modelDefault =
-			levels.length > 0 ? clampThinkingLevel(levels, defaultThinking) : 'off';
+			levels.length > 0 ? this.pickDefaultThinking(levels, defaultThinking) : 'off';
 
 		/** @type {vscode.LanguageModelChatInformation & { configurationSchema?: object }} */
 		const info = {
@@ -194,7 +208,9 @@ export class OllamaCloudChatProvider {
 	 * @param {string} defaultLevel
 	 */
 	buildThinkingConfigurationSchema(levels, defaultLevel) {
-		const effectiveDefault = levels.includes(defaultLevel) ? defaultLevel : levels[0];
+		const effectiveDefault = levels.includes(defaultLevel)
+			? defaultLevel
+			: this.pickDefaultThinking(levels, defaultLevel);
 		return {
 			type: 'object',
 			properties: {
@@ -225,14 +241,18 @@ export class OllamaCloudChatProvider {
 			options?.modelOptions?.reasoningEffort ??
 			options?.modelOptions?.effort;
 
+		const levels = meta?.thinkingLevels;
 		let level =
 			typeof fromConfig === 'string' && fromConfig.trim()
 				? fromConfig.trim().toLowerCase()
-				: this.getConfig().defaultThinkingLevel;
+				: levels?.length
+					? this.pickDefaultThinking(levels, this.getConfig().defaultThinkingLevel)
+					: this.getConfig().defaultThinkingLevel;
 
-		const levels = meta?.thinkingLevels;
 		if (levels?.length) {
-			level = clampThinkingLevel(levels, level);
+			level = levels.includes(level)
+				? level
+				: this.pickDefaultThinking(levels, this.getConfig().defaultThinkingLevel);
 		}
 		return level;
 	}

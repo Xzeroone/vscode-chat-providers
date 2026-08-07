@@ -55,6 +55,18 @@ cd vscode-chat-providers
 
 Then open **Chat** → model picker → pick the vendor.
 
+### Thinking effort defaults (Chat + Agents)
+
+Per-model schema defaults (what Agents use when you do not pick a level):
+
+| Ladder | Default |
+|--------|---------|
+| Includes **medium** | **medium** |
+| **off → high** (no low/medium) | **high** |
+| Other | first useful level (prefer high) |
+
+No adaptive auto-router — fixed smart defaults only. Override anytime in the model’s Thinking Effort control or the provider’s `defaultThinkingLevel` setting (fallback).
+
 ---
 
 ## Layout

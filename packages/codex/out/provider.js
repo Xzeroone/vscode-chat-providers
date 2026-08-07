@@ -7,6 +7,7 @@ import { discoverModels } from './models.js';
 import { convertMessages, convertTools, convertToolChoice } from './messages.js';
 import { streamCodexResponse } from './client.js';
 import { debug, logAlways } from './debug.js';
+import { smartDefaultThinkingLevel } from './default-effort.js';
 
 const THINKING_LABELS = {
 	low: 'Low',
@@ -45,7 +46,7 @@ export class CodexChatProvider {
 		return {
 			clientVersion: /** @type {string} */ (cfg.get('clientVersion') || ''),
 			hideHidden: cfg.get('hideHiddenModels') !== false,
-			defaultThinkingLevel: /** @type {string} */ (cfg.get('defaultThinkingLevel') || 'low'),
+			defaultThinkingLevel: /** @type {string} */ (cfg.get('defaultThinkingLevel') || 'medium'),
 			defaultMaxTokens: /** @type {number} */ (cfg.get('defaultMaxTokens') ?? 0),
 			refreshIntervalMinutes: /** @type {number} */ (cfg.get('refreshIntervalMinutes') ?? 60),
 		};
@@ -119,13 +120,23 @@ export class CodexChatProvider {
 	 * @param {CodexModel} m
 	 * @param {string} defaultThinking
 	 */
+	/**
+	 * Prefer ladder-aware default: medium when available, high for off→high.
+	 * @param {string[]} levels
+	 * @param {string | undefined} catalogDefault
+	 * @param {string} userDefault
+	 */
+	pickDefaultThinking(levels, catalogDefault, userDefault) {
+		const smart = smartDefaultThinkingLevel(levels);
+		if (smart && levels.includes(smart)) return smart;
+		if (catalogDefault && levels.includes(catalogDefault)) return catalogDefault;
+		if (userDefault && levels.includes(userDefault)) return userDefault;
+		return levels[0];
+	}
+
 	toModelInfo(m, defaultThinking) {
 		const levels = m.thinkingLevels?.length ? m.thinkingLevels : ['low', 'medium', 'high'];
-		const modelDefault = levels.includes(m.defaultThinking)
-			? m.defaultThinking
-			: levels.includes(defaultThinking)
-				? defaultThinking
-				: levels[0];
+		const modelDefault = this.pickDefaultThinking(levels, m.defaultThinking, defaultThinking);
 
 		/** @type {vscode.LanguageModelChatInformation & { configurationSchema?: object }} */
 		const info = {
@@ -181,16 +192,24 @@ export class CodexChatProvider {
 			options?.modelOptions?.thinkingLevel ??
 			options?.modelOptions?.reasoningEffort;
 
+		const levels = meta?.thinkingLevels?.length
+			? meta.thinkingLevels
+			: ['low', 'medium', 'high'];
 		let level =
 			typeof fromConfig === 'string' && fromConfig.trim()
 				? fromConfig.trim().toLowerCase()
-				: meta?.defaultThinking || this.getConfig().defaultThinkingLevel;
+				: this.pickDefaultThinking(
+						levels,
+						meta?.defaultThinking,
+						this.getConfig().defaultThinkingLevel,
+					);
 
-		const levels = meta?.thinkingLevels;
-		if (levels?.length && !levels.includes(level)) {
-			level = levels.includes(meta.defaultThinking)
-				? meta.defaultThinking
-				: levels[0];
+		if (!levels.includes(level)) {
+			level = this.pickDefaultThinking(
+				levels,
+				meta?.defaultThinking,
+				this.getConfig().defaultThinkingLevel,
+			);
 		}
 		return level;
 	}
