@@ -12,6 +12,7 @@ import {
 	THINKING_DESCRIPTIONS,
 } from './thinking-levels.js';
 import { smartDefaultThinkingLevel } from './default-effort.js';
+import { OLLAMA_CLOUD_MAX_OUTPUT_TOKENS } from './registry.js';
 import { debug, logAlways } from './debug.js';
 
 /**
@@ -160,6 +161,11 @@ export class OllamaCloudChatProvider {
 		const levels = m.thinkingLevels ?? [];
 		const modelDefault =
 			levels.length > 0 ? this.pickDefaultThinking(levels, defaultThinking) : 'off';
+		const maxOut = Math.min(
+			Math.max(1024, m.maxTokens || 32_768),
+			OLLAMA_CLOUD_MAX_OUTPUT_TOKENS,
+		);
+		const maxIn = Math.max(1024, (m.contextWindow || 128_000) - maxOut);
 
 		/** @type {vscode.LanguageModelChatInformation & { configurationSchema?: object }} */
 		const info = {
@@ -167,8 +173,8 @@ export class OllamaCloudChatProvider {
 			name: m.id,
 			family,
 			version: m.id,
-			maxInputTokens: Math.max(1024, m.contextWindow - m.maxTokens),
-			maxOutputTokens: m.maxTokens,
+			maxInputTokens: maxIn,
+			maxOutputTokens: maxOut,
 			tooltip: [
 				'Ollama Cloud',
 				m.toolCalling ? 'tools' : null,
@@ -276,6 +282,20 @@ export class OllamaCloudChatProvider {
 		const modelId = model.id;
 		const meta = this._byId.get(modelId);
 		const thinkingLevel = this.resolveThinkingLevel(options, meta);
+		// Prefer live discovery max; never exceed Ollama Cloud hard cap (65536)
+		const requestedMax =
+			(typeof model.maxOutputTokens === 'number' && model.maxOutputTokens > 0
+				? model.maxOutputTokens
+				: undefined) ||
+			meta?.maxTokens ||
+			(typeof defaultMaxTokens === 'number' && defaultMaxTokens > 0
+				? defaultMaxTokens
+				: 32_768);
+		const maxTokens = Math.min(
+			Math.max(1024, Math.floor(requestedMax)),
+			meta?.maxTokens || OLLAMA_CLOUD_MAX_OUTPUT_TOKENS,
+			OLLAMA_CLOUD_MAX_OUTPUT_TOKENS,
+		);
 		const wire =
 			meta?.thinking && meta.thinkingLevelMap
 				? wireForLevel(meta.thinkingLevelMap, thinkingLevel)
@@ -318,7 +338,7 @@ export class OllamaCloudChatProvider {
 				messages: openaiMessages,
 				tools,
 				toolChoice,
-				maxTokens: model.maxOutputTokens || defaultMaxTokens,
+				maxTokens,
 				reasoningEffort: wire.reasoning_effort,
 				think: wire.think,
 				signal: controller.signal,

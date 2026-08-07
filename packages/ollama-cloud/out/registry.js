@@ -121,7 +121,14 @@ function positiveInt(n) {
 }
 
 /**
- * Derive a practical max output when neither API nor registry has one.
+ * Ollama Cloud hard-rejects max_tokens above this on several models
+ * (e.g. deepseek-v4-flash: "maximum output tokens (65536)").
+ * models.dev often lists limit.output == context (1M) which is not the API cap.
+ */
+export const OLLAMA_CLOUD_MAX_OUTPUT_TOKENS = 65_536;
+
+/**
+ * Derive a practical max output when neither API nor registry has a trustworthy one.
  * Prefer a slice of context, with sane floor/ceiling for Chat budgeting.
  *
  * @param {number} contextWindow
@@ -129,9 +136,26 @@ function positiveInt(n) {
  */
 export function deriveMaxOutputTokens(contextWindow) {
 	const ctx = Math.max(4096, contextWindow || 128_000);
-	// ~25% of context, never below 8k, never above 128k (Chat-friendly cap)
+	// ~25% of context, never below 8k, never above Ollama Cloud's hard output cap
 	const raw = Math.floor(ctx * 0.25);
-	return clamp(raw, 8_192, 131_072);
+	return clamp(raw, 8_192, OLLAMA_CLOUD_MAX_OUTPUT_TOKENS);
+}
+
+/**
+ * models.dev sometimes copies context into limit.output (e.g. 1M/1M). That is
+ * not a real completion budget and must not be sent as max_tokens.
+ *
+ * @param {number | undefined} regOut
+ * @param {number} contextWindow
+ * @returns {number | undefined}
+ */
+export function trustworthyRegistryOutput(regOut, contextWindow) {
+	if (typeof regOut !== 'number' || !(regOut > 0)) return undefined;
+	// Equal/near-equal to context → catalog placeholder, ignore
+	if (contextWindow > 0 && regOut >= contextWindow * 0.5) return undefined;
+	// Above known API hard cap → not usable as-is
+	if (regOut > OLLAMA_CLOUD_MAX_OUTPUT_TOKENS) return undefined;
+	return Math.floor(regOut);
 }
 
 /**
@@ -145,27 +169,25 @@ export function deriveMaxOutputTokens(contextWindow) {
  */
 export function resolveTokenLimits(p) {
 	const regCtx = p.registry?.context;
-	const regOut = p.registry?.maxOutput;
 	const liveCtx = p.liveContext;
 
 	const contextWindow = liveCtx || regCtx || 128_000;
 
-	let maxTokens =
-		regOut ||
-		(typeof p.defaultMaxTokens === 'number' && p.defaultMaxTokens > 0
-			? p.defaultMaxTokens
-			: undefined) ||
-		deriveMaxOutputTokens(contextWindow);
+	const regOut = trustworthyRegistryOutput(p.registry?.maxOutput, contextWindow);
+	const settingOut =
+		typeof p.defaultMaxTokens === 'number' && p.defaultMaxTokens > 0
+			? Math.min(p.defaultMaxTokens, OLLAMA_CLOUD_MAX_OUTPUT_TOKENS)
+			: undefined;
+
+	let maxTokens = regOut || settingOut || deriveMaxOutputTokens(contextWindow);
 
 	// Output cannot exceed context; leave room for at least a small prompt.
 	const maxFit = Math.max(1024, contextWindow - 1024);
-	if (maxTokens > maxFit) {
-		maxTokens = Math.min(maxTokens, maxFit, 131_072);
-		// If still equal to almost whole context (e.g. registry output == context),
-		// shrink to a practical share.
-		if (maxTokens >= contextWindow * 0.9) {
-			maxTokens = deriveMaxOutputTokens(contextWindow);
-		}
+	maxTokens = Math.min(maxTokens, maxFit, OLLAMA_CLOUD_MAX_OUTPUT_TOKENS);
+
+	// If still equal to almost whole context, shrink to a practical share.
+	if (maxTokens >= contextWindow * 0.9) {
+		maxTokens = deriveMaxOutputTokens(contextWindow);
 	}
 
 	return {
@@ -173,7 +195,7 @@ export function resolveTokenLimits(p) {
 		maxTokens: Math.max(1024, Math.floor(maxTokens)),
 		maxSource: regOut
 			? 'models.dev'
-			: p.defaultMaxTokens
+			: settingOut
 				? 'setting'
 				: 'derived',
 		contextSource: liveCtx ? 'api/show' : regCtx ? 'models.dev' : 'default',

@@ -13,10 +13,11 @@ import {
 	fetchOllamaCloudRegistry,
 	lookupRegistryModel,
 	resolveTokenLimits,
+	OLLAMA_CLOUD_MAX_OUTPUT_TOKENS,
 } from './registry.js';
 
 export const DEFAULT_BASE_URL = 'https://ollama.com';
-const DEFAULT_MAX_TOKENS = 32768;
+const DEFAULT_MAX_TOKENS = 32_768;
 const DEFAULT_CONTEXT = 128_000;
 
 /** @type {((...args: unknown[]) => void) | undefined} */
@@ -287,13 +288,19 @@ export async function streamChatCompletions(opts) {
 		onToolCallDelta,
 	} = opts;
 
+	// Always clamp — VS Code may pass model.maxOutputTokens from a stale catalog
+	const safeMaxTokens = Math.min(
+		Math.max(1, Math.floor(Number(maxTokens) || DEFAULT_MAX_TOKENS)),
+		OLLAMA_CLOUD_MAX_OUTPUT_TOKENS,
+	);
+
 	const url = `${apiBase(baseUrl)}/chat/completions`;
 	/** @type {Record<string, unknown>} */
 	const body = {
 		model,
 		messages,
 		stream: true,
-		max_tokens: maxTokens,
+		max_tokens: safeMaxTokens,
 	};
 	if (tools?.length) {
 		body.tools = tools;
@@ -311,6 +318,7 @@ export async function streamChatCompletions(opts) {
 		model,
 		messageCount: messages.length,
 		tools: tools?.length ?? 0,
+		max_tokens: safeMaxTokens,
 		reasoning_effort: body.reasoning_effort,
 		think: body.think,
 	});
