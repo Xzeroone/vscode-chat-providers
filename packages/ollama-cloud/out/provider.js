@@ -11,6 +11,11 @@ import {
 	THINKING_LABELS,
 	THINKING_DESCRIPTIONS,
 } from './thinking-levels.js';
+import {
+	pickAutoThinkingLevel,
+	extractTextFromMessages,
+	lowestEffort,
+} from './auto-thinking.js';
 import { debug, logAlways } from './debug.js';
 
 /**
@@ -50,7 +55,7 @@ export class OllamaCloudChatProvider {
 			// 0 / unset = fully auto (models.dev or derived from context)
 			defaultMaxTokens: /** @type {number} */ (cfg.get('defaultMaxTokens') ?? 0),
 			refreshIntervalMinutes: /** @type {number} */ (cfg.get('refreshIntervalMinutes') ?? 60),
-			defaultThinkingLevel: /** @type {string} */ (cfg.get('defaultThinkingLevel') || 'off'),
+			defaultThinkingLevel: /** @type {string} */ (cfg.get('defaultThinkingLevel') || 'auto'),
 			includeReasoningInResponse: cfg.get('includeReasoningInResponse') === true,
 			useRegistry: cfg.get('useModelsDevRegistry') !== false,
 		};
@@ -145,7 +150,11 @@ export class OllamaCloudChatProvider {
 		const family = m.id.split(':')[0] || m.id;
 		const levels = m.thinkingLevels ?? [];
 		const modelDefault =
-			levels.length > 0 ? clampThinkingLevel(levels, defaultThinking) : 'off';
+			defaultThinking === 'auto'
+				? 'auto'
+				: levels.length > 0
+					? clampThinkingLevel(levels, defaultThinking)
+					: 'off';
 
 		/** @type {vscode.LanguageModelChatInformation & { configurationSchema?: object }} */
 		const info = {
@@ -194,7 +203,14 @@ export class OllamaCloudChatProvider {
 	 * @param {string} defaultLevel
 	 */
 	buildThinkingConfigurationSchema(levels, defaultLevel) {
-		const effectiveDefault = levels.includes(defaultLevel) ? defaultLevel : levels[0];
+		const uiLevels = ['auto', ...levels];
+		const effectiveDefault =
+			defaultLevel === 'auto' || levels.includes(defaultLevel) ? defaultLevel : 'auto';
+		const labels = { auto: 'Auto', ...THINKING_LABELS };
+		const descs = {
+			auto: 'Start low/off; raise when the task looks hard (recommended for Agent)',
+			...THINKING_DESCRIPTIONS,
+		};
 		return {
 			type: 'object',
 			properties: {
@@ -202,12 +218,12 @@ export class OllamaCloudChatProvider {
 					type: 'string',
 					title: 'Thinking Effort',
 					description:
-						'Reasoning effort for this Ollama Cloud model (from capabilities + family map)',
+						'Auto = cheapest by default, raises for complex tasks (recommended in Agent)',
 					group: 'navigation',
-					enum: levels,
+					enum: uiLevels,
 					default: effectiveDefault,
-					enumItemLabels: levels.map((l) => THINKING_LABELS[l] || l),
-					enumDescriptions: levels.map((l) => THINKING_DESCRIPTIONS[l] || l),
+					enumItemLabels: uiLevels.map((l) => labels[l] || l),
+					enumDescriptions: uiLevels.map((l) => descs[l] || l),
 				},
 			},
 		};
@@ -216,8 +232,9 @@ export class OllamaCloudChatProvider {
 	/**
 	 * @param {object} options
 	 * @param {CloudModel | undefined} meta
+	 * @param {readonly any[]} [messages]
 	 */
-	resolveThinkingLevel(options, meta) {
+	resolveThinkingLevel(options, meta, messages) {
 		const fromConfig =
 			options?.modelConfiguration?.thinkingLevel ??
 			options?.configuration?.thinkingLevel ??
@@ -228,11 +245,26 @@ export class OllamaCloudChatProvider {
 		let level =
 			typeof fromConfig === 'string' && fromConfig.trim()
 				? fromConfig.trim().toLowerCase()
-				: this.getConfig().defaultThinkingLevel;
+				: this.getConfig().defaultThinkingLevel || 'auto';
 
-		const levels = meta?.thinkingLevels;
-		if (levels?.length) {
-			level = clampThinkingLevel(levels, level);
+		const levels = meta?.thinkingLevels || [];
+		if (level === 'auto' || (levels.length && !levels.includes(level))) {
+			if (level !== 'auto' && levels.includes(level)) {
+				/* fixed */
+			} else {
+				const picked = pickAutoThinkingLevel({
+					text: extractTextFromMessages(messages || []),
+					messageCount: messages?.length ?? 1,
+					toolCount: options?.tools?.length ?? 0,
+					availableLevels: levels.length ? levels : ['off', 'low', 'medium', 'high'],
+				});
+				debug('[auto-thinking]', picked);
+				level = picked.level;
+			}
+		}
+		if (levels.length) {
+			if (!levels.includes(level)) level = lowestEffort(levels);
+			else level = clampThinkingLevel(levels, level);
 		}
 		return level;
 	}
@@ -255,7 +287,7 @@ export class OllamaCloudChatProvider {
 		const { baseUrl, defaultMaxTokens, includeReasoningInResponse } = this.getConfig();
 		const modelId = model.id;
 		const meta = this._byId.get(modelId);
-		const thinkingLevel = this.resolveThinkingLevel(options, meta);
+		const thinkingLevel = this.resolveThinkingLevel(options, meta, messages);
 		const wire =
 			meta?.thinking && meta.thinkingLevelMap
 				? wireForLevel(meta.thinkingLevelMap, thinkingLevel)

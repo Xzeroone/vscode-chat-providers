@@ -2,7 +2,7 @@
 	"name": "codex-chat-provider",
 	"displayName": "Codex Chat Provider (ChatGPT OAuth)",
 	"description": "VS Code Chat language models via OpenAI Codex / ChatGPT subscription OAuth. Reuses ~/.codex or Pi openai-codex login \u2014 no API key.",
-	"version": "0.1.1",
+	"version": "0.1.2",
 	"publisher": "xzeroone",
 	"preview": true,
 	"author": {
@@ -118,6 +118,7 @@
 				"openaiCodex.defaultThinkingLevel": {
 					"type": "string",
 					"enum": [
+						"auto",
 						"low",
 						"medium",
 						"high",
@@ -125,8 +126,8 @@
 						"max",
 						"ultra"
 					],
-					"default": "low",
-					"description": "Default reasoning effort when the model picker value is not set (clamped per model).",
+					"default": "auto",
+					"markdownDescription": "Default thinking effort. **auto** = lowest, raises for complex/agent tasks.",
 					"order": 6
 				},
 				"openaiCodex.defaultMaxTokens": {

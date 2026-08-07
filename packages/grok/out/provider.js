@@ -7,8 +7,24 @@ import { discoverModels } from './models.js';
 import { convertMessages, convertTools, convertToolChoice } from './messages.js';
 import { streamChat } from './client.js';
 import { debug, logAlways } from './debug.js';
+import {
+	pickAutoThinkingLevel,
+	extractTextFromMessages,
+	lowestEffort,
+} from './auto-thinking.js';
 
-const LABELS = { low: 'Low', medium: 'Medium', high: 'High' };
+const LABELS = {
+	auto: 'Auto',
+	low: 'Low',
+	medium: 'Medium',
+	high: 'High',
+};
+const DESCS = {
+	auto: 'Start low; raise effort when the task looks hard (good for Agent mode)',
+	low: 'Quick / cheap',
+	medium: 'Balanced',
+	high: 'Deep reasoning',
+};
 
 /**
  * @typedef {import('./models.js').GrokModel} GrokModel
@@ -41,7 +57,7 @@ export class GrokChatProvider {
 				cfg.get('modelsProxyUrl') || 'https://cli-chat-proxy.grok.com/v1/models'
 			),
 			excludeImageModels: cfg.get('excludeImageModels') !== false,
-			defaultThinkingLevel: /** @type {string} */ (cfg.get('defaultThinkingLevel') || 'low'),
+			defaultThinkingLevel: /** @type {string} */ (cfg.get('defaultThinkingLevel') || 'auto'),
 			defaultMaxTokens: /** @type {number} */ (cfg.get('defaultMaxTokens') ?? 0),
 			refreshIntervalMinutes: /** @type {number} */ (cfg.get('refreshIntervalMinutes') ?? 60),
 			includeReasoningInResponse: cfg.get('includeReasoningInResponse') === true,
@@ -115,11 +131,15 @@ export class GrokChatProvider {
 	 */
 	toModelInfo(m, defaultThinking) {
 		const levels = m.thinkingLevels || [];
-		const modelDefault = levels.includes(m.defaultThinking || '')
-			? m.defaultThinking
-			: levels.includes(defaultThinking)
-				? defaultThinking
-				: levels[0];
+		const uiLevels = levels.length >= 1 ? ['auto', ...levels] : [];
+		const modelDefault =
+			defaultThinking === 'auto' || uiLevels.includes(defaultThinking)
+				? defaultThinking === 'auto' || levels.includes(defaultThinking)
+					? defaultThinking === 'auto'
+						? 'auto'
+						: defaultThinking
+					: 'auto'
+				: 'auto';
 
 		/** @type {vscode.LanguageModelChatInformation & { configurationSchema?: object }} */
 		const info = {
@@ -131,30 +151,32 @@ export class GrokChatProvider {
 			maxOutputTokens: m.maxTokens,
 			tooltip: [
 				'Grok · xAI OAuth',
-				levels.length ? `thinking: ${levels.join(', ')}` : null,
+				levels.length ? `thinking: auto, ${levels.join(', ')}` : null,
 				`ctx ${m.contextWindow}`,
 			]
 				.filter(Boolean)
 				.join(' · '),
-			detail: levels.length ? `effort · ${levels.join('/')}` : 'x.ai',
+			detail: levels.length ? `effort · auto/${levels.join('/')}` : 'x.ai',
 			capabilities: {
 				toolCalling: m.toolCalling !== false,
 				imageInput: false,
 			},
 		};
 
-		if (levels.length >= 2) {
+		if (uiLevels.length >= 2) {
 			info.configurationSchema = {
 				type: 'object',
 				properties: {
 					thinkingLevel: {
 						type: 'string',
 						title: 'Thinking Effort',
-						description: 'Grok reasoning effort (from Grok CLI / model catalog)',
+						description:
+							'Auto = lowest by default, raises for complex tasks (recommended in Agent)',
 						group: 'navigation',
-						enum: levels,
+						enum: uiLevels,
 						default: modelDefault,
-						enumItemLabels: levels.map((l) => LABELS[l] || l),
+						enumItemLabels: uiLevels.map((l) => LABELS[l] || l),
+						enumDescriptions: uiLevels.map((l) => DESCS[l] || l),
 					},
 				},
 			};
@@ -165,8 +187,11 @@ export class GrokChatProvider {
 	/**
 	 * @param {object} options
 	 * @param {GrokModel | undefined} meta
+	 * @param {readonly any[]} [messages]
 	 */
-	resolveThinking(options, meta) {
+	resolveThinking(options, meta, messages) {
+		if (!meta?.supportsThinking) return undefined;
+		const levels = meta.thinkingLevels || [];
 		const from =
 			options?.modelConfiguration?.thinkingLevel ??
 			options?.configuration?.thinkingLevel ??
@@ -175,12 +200,26 @@ export class GrokChatProvider {
 		let level =
 			typeof from === 'string' && from.trim()
 				? from.trim().toLowerCase()
-				: meta?.defaultThinking || this.getConfig().defaultThinkingLevel;
-		const levels = meta?.thinkingLevels;
-		if (levels?.length && !levels.includes(level)) {
-			level = levels.includes(meta.defaultThinking) ? meta.defaultThinking : levels[0];
+				: this.getConfig().defaultThinkingLevel || 'auto';
+
+		if (level === 'auto' || (levels.length && !levels.includes(level) && level !== 'auto')) {
+			if (level !== 'auto' && levels.includes(level)) {
+				/* keep */
+			} else {
+				const picked = pickAutoThinkingLevel({
+					text: extractTextFromMessages(messages || []),
+					messageCount: messages?.length ?? 1,
+					toolCount: options?.tools?.length ?? 0,
+					availableLevels: levels,
+				});
+				debug('[auto-thinking]', picked);
+				level = picked.level;
+			}
 		}
-		return meta?.supportsThinking ? level : undefined;
+		if (levels.length && !levels.includes(level)) {
+			level = lowestEffort(levels);
+		}
+		return level;
 	}
 
 	/**
@@ -196,7 +235,7 @@ export class GrokChatProvider {
 		try {
 			const tokens = await getValidTokens(controller.signal);
 			const meta = this._byId.get(model.id);
-			const effort = this.resolveThinking(options, meta);
+			const effort = this.resolveThinking(options, meta, messages);
 			const openaiMessages = convertMessages(messages);
 			const tools = convertTools(options.tools);
 			const toolChoice = convertToolChoice(options.toolMode, Boolean(tools?.length));
