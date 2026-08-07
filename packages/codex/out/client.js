@@ -5,6 +5,7 @@
 import * as os from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { clampMaxTokens } from './token-limits.js';
+import { fetchWithRetry, formatFetchError } from './fetch-resilient.js';
 
 const DEFAULT_BASE = 'https://chatgpt.com/backend-api';
 
@@ -95,22 +96,32 @@ export async function streamCodexResponse(opts) {
 		max_output_tokens: safeMax,
 	});
 
-	const res = await fetchFn(url, {
-		method: 'POST',
-		headers: {
-			Authorization: `Bearer ${access}`,
-			'chatgpt-account-id': accountId,
-			'OpenAI-Beta': 'responses=experimental',
-			accept: 'text/event-stream',
-			'content-type': 'application/json',
-			originator: 'vscode-codex-provider',
-			'User-Agent': `vscode-codex-provider (${os.platform()} ${os.release()})`,
-			'session-id': sessionId,
-			'x-client-request-id': sessionId,
-		},
-		body: JSON.stringify(body),
-		signal,
-	});
+	let res;
+	try {
+		res = await fetchWithRetry(
+			fetchFn,
+			url,
+			{
+				method: 'POST',
+				headers: {
+					Authorization: `Bearer ${access}`,
+					'chatgpt-account-id': accountId,
+					'OpenAI-Beta': 'responses=experimental',
+					accept: 'text/event-stream',
+					'content-type': 'application/json',
+					originator: 'vscode-codex-provider',
+					'User-Agent': `vscode-codex-provider (${os.platform()} ${os.release()})`,
+					'session-id': sessionId,
+					'x-client-request-id': sessionId,
+				},
+				body: JSON.stringify(body),
+				signal,
+			},
+			{ signal, debug, label: 'codex-chat', retries: 3 },
+		);
+	} catch (err) {
+		throw new Error(`Codex chat failed: ${formatFetchError(err)}`);
+	}
 
 	if (!res.ok) {
 		const errText = await res.text().catch(() => '');
@@ -137,7 +148,13 @@ export async function streamCodexResponse(opts) {
 			throw new Error('cancelled');
 		}
 
-		const { done, value } = await reader.read();
+		let done;
+		let value;
+		try {
+			({ done, value } = await reader.read());
+		} catch (err) {
+			throw new Error(`Codex stream interrupted: ${formatFetchError(err)}`);
+		}
 		if (done) break;
 
 		buffer += decoder.decode(value, { stream: true });

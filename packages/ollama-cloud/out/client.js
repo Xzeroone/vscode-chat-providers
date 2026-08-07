@@ -15,6 +15,7 @@ import {
 	resolveTokenLimits,
 	OLLAMA_CLOUD_MAX_OUTPUT_TOKENS,
 } from './registry.js';
+import { fetchWithRetry, formatFetchError } from './fetch-resilient.js';
 
 export const DEFAULT_BASE_URL = 'https://ollama.com';
 const DEFAULT_MAX_TOKENS = 32_768;
@@ -323,16 +324,26 @@ export async function streamChatCompletions(opts) {
 		think: body.think,
 	});
 
-	const res = await fetchFn(url, {
-		method: 'POST',
-		headers: {
-			Authorization: `Bearer ${apiKey}`,
-			'Content-Type': 'application/json',
-			Accept: 'text/event-stream',
-		},
-		body: JSON.stringify(body),
-		signal,
-	});
+	let res;
+	try {
+		res = await fetchWithRetry(
+			fetchFn,
+			url,
+			{
+				method: 'POST',
+				headers: {
+					Authorization: `Bearer ${apiKey}`,
+					'Content-Type': 'application/json',
+					Accept: 'text/event-stream',
+				},
+				body: JSON.stringify(body),
+				signal,
+			},
+			{ signal, debug, label: 'ollama-chat', retries: 3 },
+		);
+	} catch (err) {
+		throw new Error(`Ollama Cloud chat failed: ${formatFetchError(err)}`);
+	}
 
 	if (!res.ok) {
 		const errText = await res.text().catch(() => '');
@@ -361,7 +372,15 @@ export async function streamChatCompletions(opts) {
 			throw new Error('cancelled');
 		}
 
-		const { done, value } = await reader.read();
+		let done;
+		let value;
+		try {
+			({ done, value } = await reader.read());
+		} catch (err) {
+			throw new Error(
+				`Ollama Cloud stream interrupted: ${formatFetchError(err)}`,
+			);
+		}
 		if (done) break;
 
 		buffer += decoder.decode(value, { stream: true });

@@ -3,6 +3,7 @@
  * No vscode dependency.
  */
 import { clampMaxTokens } from './token-limits.js';
+import { fetchWithRetry, formatFetchError } from './fetch-resilient.js';
 
 /** @type {((...args: unknown[]) => void) | undefined} */
 let _debug;
@@ -74,17 +75,27 @@ export async function streamChat(opts) {
 		max_tokens: safeMaxTokens,
 	});
 
-	const res = await fetchFn(url, {
-		method: 'POST',
-		headers: {
-			Authorization: `Bearer ${access}`,
-			'Content-Type': 'application/json',
-			Accept: 'text/event-stream',
-			'User-Agent': 'vscode-grok-provider',
-		},
-		body: JSON.stringify(body),
-		signal,
-	});
+	let res;
+	try {
+		res = await fetchWithRetry(
+			fetchFn,
+			url,
+			{
+				method: 'POST',
+				headers: {
+					Authorization: `Bearer ${access}`,
+					'Content-Type': 'application/json',
+					Accept: 'text/event-stream',
+					'User-Agent': 'vscode-grok-provider',
+				},
+				body: JSON.stringify(body),
+				signal,
+			},
+			{ signal, debug, label: 'grok-chat', retries: 3 },
+		);
+	} catch (err) {
+		throw new Error(`Grok chat failed: ${formatFetchError(err)}`);
+	}
 
 	if (!res.ok) {
 		const t = await res.text().catch(() => '');
@@ -105,7 +116,13 @@ export async function streamChat(opts) {
 			}
 			throw new Error('cancelled');
 		}
-		const { done, value } = await reader.read();
+		let done;
+		let value;
+		try {
+			({ done, value } = await reader.read());
+		} catch (err) {
+			throw new Error(`Grok stream interrupted: ${formatFetchError(err)}`);
+		}
 		if (done) break;
 		buffer += decoder.decode(value, { stream: true });
 		const lines = buffer.split('\n');

@@ -2,7 +2,7 @@
 	"name": "grok-chat-provider",
 	"displayName": "Grok Chat Provider (xAI OAuth)",
 	"description": "VS Code Chat language models via xAI Grok subscription OAuth. Reuses Grok CLI (~/.grok) or Pi xai login \u2014 same client as official tools.",
-	"version": "0.1.6",
+	"version": "0.1.7",
 	"publisher": "xzeroone",
 	"preview": true,
 	"author": {
